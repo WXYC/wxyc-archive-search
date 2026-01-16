@@ -1,0 +1,33 @@
+{
+  "name": "wxyc-archive-search",
+  "version": "1.0.0",
+  "description": "REST API that searches WXYC playlist archives and returns archive.wxyc.org URLs for playback",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "npx tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "wxyc",
+    "radio",
+    "archive",
+    "playlist"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@hono/node-server": "^1.19.9",
+    "cheerio": "^1.1.2",
+    "hono": "^4.11.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.9",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.17"
+  }
+}
