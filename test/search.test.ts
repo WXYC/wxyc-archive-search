@@ -13,9 +13,12 @@ vi.mock('jose', () => ({
 }));
 
 // Mock playlist service
+const mockFilterResults = vi.fn(
+  (results: SearchResult[], _params: Record<string, string | undefined>) => results,
+);
 vi.mock('../src/services/playlist.js', () => ({
   searchPlaylists: vi.fn(),
-  filterResults: vi.fn((results: SearchResult[]) => results),
+  filterResults: (...args: unknown[]) => mockFilterResults(...(args as Parameters<typeof mockFilterResults>)),
 }));
 
 // Mock show service
@@ -272,5 +275,105 @@ describe('GET /search', () => {
         5,
       );
     });
+  });
+
+  describe('error handling', () => {
+    it('returns 500 when searchPlaylists throws', async () => {
+      mockedSearchPlaylists.mockRejectedValueOnce(new Error('upstream down'));
+
+      const res = await app.request('/search?q=test&page=1');
+      expect(res.status).toBe(500);
+
+      const json = await res.json();
+      expect(json.error).toBe('An error occurred while searching');
+    });
+
+    it('skips individual results when getShowDetails fails', async () => {
+      mockedSearchPlaylists.mockResolvedValueOnce({
+        results: [
+          makeResult({ flowsheetEntryId: '1' }),
+          makeResult({ flowsheetEntryId: '2' }),
+        ],
+        totalHits: 2,
+        page: 1,
+        pageSize: 50,
+      });
+
+      mockedGetShowDetails
+        .mockRejectedValueOnce(new Error('show not found'))
+        .mockResolvedValueOnce(showDetailsResponse);
+
+      const res = await app.request('/search?q=test&page=1');
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json.total).toBe(1);
+      expect(json.results).toHaveLength(1);
+    });
+  });
+
+  describe('field filtering', () => {
+    beforeEach(() => {
+      mockedJwtVerify.mockResolvedValue({
+        payload: { sub: 'user1', role: 'dj' },
+        protectedHeader: { alg: 'RS256' },
+        key: {} as any,
+      } as any);
+    });
+
+    it('calls filterResults when artist param is provided', async () => {
+      mockedSearchPlaylists.mockResolvedValueOnce({
+        results: [makeResult()],
+        totalHits: 1,
+        page: 1,
+        pageSize: 50,
+      });
+
+      await app.request('/search?q=test&artist=Radiohead', {
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+
+      expect(mockFilterResults).toHaveBeenCalled();
+    });
+
+    it('calls filterResults when song param is provided', async () => {
+      mockedSearchPlaylists.mockResolvedValueOnce({
+        results: [makeResult()],
+        totalHits: 1,
+        page: 1,
+        pageSize: 50,
+      });
+
+      await app.request('/search?q=test&song=Creep', {
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+
+      expect(mockFilterResults).toHaveBeenCalled();
+    });
+
+    it('calls filterResults when album param is provided', async () => {
+      mockedSearchPlaylists.mockResolvedValueOnce({
+        results: [makeResult()],
+        totalHits: 1,
+        page: 1,
+        pageSize: 50,
+      });
+
+      await app.request('/search?q=test&album=Pablo', {
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+
+      expect(mockFilterResults).toHaveBeenCalled();
+    });
+  });
+});
+
+describe('GET /health', () => {
+  it('returns status ok', async () => {
+    const res = await app.request('/health');
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.status).toBe('ok');
   });
 });

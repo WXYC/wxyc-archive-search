@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { mapShowDetails } from '../src/services/show.js';
+import { mapShowDetails, getShowDetails } from '../src/services/show.js';
 import type { TubafrenzyShowResponse } from '../src/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -18,7 +18,6 @@ describe('mapShowDetails', () => {
     expect(details.dj).toBe('DJ Deceitful');
     expect(details.showTime).toBe('8:00 AM - 10:00 AM');
     expect(details.startTime).toBeInstanceOf(Date);
-    // 1711713600000 = 2024-03-29T12:00:00.000Z = 8:00 AM EDT
     expect(details.startTime.getTime()).toBe(1711713600000);
   });
 
@@ -57,5 +56,50 @@ describe('mapShowDetails', () => {
     };
     const details = mapShowDetails(json);
     expect(details.dj).toBe('');
+  });
+});
+
+describe('getShowDetails', () => {
+  const fixtureJson: TubafrenzyShowResponse = JSON.parse(
+    readFileSync(join(fixturesDir, 'show-detail.json'), 'utf-8'),
+  );
+
+  beforeEach(() => {
+    vi.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('fetches with correct URL and returns mapped details', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(fixtureJson), { status: 200 }),
+    );
+
+    const details = await getShowDetails('2380735');
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://wxyc.info/playlists/radioShowHighlightSearchResult?flowsheetEntry=2380735&format=json',
+    );
+    expect(details.dj).toBe('DJ Deceitful');
+    expect(details.showTime).toBe('8:00 AM - 10:00 AM');
+    expect(details.startTime.getTime()).toBe(1711713600000);
+  });
+
+  it('throws on non-OK HTTP response', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response('', { status: 404 }),
+    );
+
+    await expect(getShowDetails('999')).rejects.toThrow('Failed to fetch show details: 404');
+  });
+
+  it('throws when API returns error flag', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: true, radioShow: null, entries: [] }), { status: 200 }),
+    );
+
+    await expect(getShowDetails('999')).rejects.toThrow('Tubafrenzy show lookup returned an error');
   });
 });

@@ -47,6 +47,15 @@ describe('authMiddleware', () => {
     expect(json.authenticated).toBe(false);
   });
 
+  it('sets authenticated=false for Bearer with empty token', async () => {
+    const app = createTestApp();
+    const res = await app.request('/test', {
+      headers: { Authorization: 'Bearer ' },
+    });
+    const json = await res.json();
+    expect(json.authenticated).toBe(false);
+  });
+
   it('sets authenticated=true for valid DJ token', async () => {
     mockedJwtVerify.mockResolvedValueOnce({
       payload: { sub: 'user1', role: 'dj' },
