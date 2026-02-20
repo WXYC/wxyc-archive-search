@@ -26,10 +26,24 @@ app.get('/search', authMiddleware, async (c) => {
   }
 
   const authenticated = c.get('authenticated');
+  const explicitPage = c.req.query('page');
 
   try {
+    let requestPage = page;
+
+    // Tubafrenzy returns results oldest-first. For unauthenticated users
+    // (who only see the last 2 weeks), start from the last page so we
+    // actually get recent results. We need a preliminary request to learn
+    // the total number of pages.
+    if (!authenticated && !explicitPage) {
+      const probe = await searchPlaylists(params, 1);
+      if (probe.totalHits > probe.pageSize) {
+        requestPage = Math.ceil(probe.totalHits / probe.pageSize);
+      }
+    }
+
     const { results: searchResults, totalHits, page: currentPage, pageSize } =
-      await searchPlaylists(params, page);
+      await searchPlaylists(params, requestPage);
 
     // Apply additional filtering if specific fields were requested
     let results = searchResults;
