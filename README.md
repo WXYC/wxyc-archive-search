@@ -6,7 +6,7 @@ A REST API that searches WXYC playlist archives and returns archive.wxyc.org URL
 
 - **Runtime:** Node.js with TypeScript
 - **Framework:** Hono
-- **HTML Parsing:** cheerio
+- **Auth:** jose (JWT/JWKS verification), @wxyc/shared (role definitions)
 - **Testing:** Vitest
 - **Deployment:** Railway
 
@@ -38,28 +38,46 @@ npm run build
 npm test
 ```
 
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Server port |
+| `BETTER_AUTH_JWKS_URL` | `https://api.wxyc.org/auth/jwks` | JWKS endpoint for JWT verification |
+
 ## API Endpoints
 
 ### `GET /search`
 
-Search WXYC playlist archives. Returns results from the last 2 weeks with archive playback URLs.
+Search WXYC playlist archives. Returns results with archive playback URLs.
+
+**Access control:**
+- Unauthenticated: results are filtered to the last 2 weeks
+- Authenticated DJs (Bearer JWT with dj/musicDirector/stationManager/admin role): all results returned
 
 **Query Parameters:**
 
-| Param    | Description                            |
-|----------|----------------------------------------|
+| Param    | Description                              |
+|----------|------------------------------------------|
 | `q`      | General search term (searches all fields) |
-| `artist` | Filter by artist name                  |
-| `song`   | Filter by song title                   |
-| `album`  | Filter by album/release name           |
+| `artist` | Filter by artist name                    |
+| `song`   | Filter by song title                     |
+| `album`  | Filter by album/release name             |
+| `page`   | Page number (default: 1)                 |
 
-At least one parameter is required.
+At least one search parameter (`q`, `artist`, `song`, `album`) is required.
 
 **Example Request:**
 
 ```bash
+# Unauthenticated (last 2 weeks only)
 curl "http://localhost:3000/search?q=radiohead"
-curl "http://localhost:3000/search?artist=radiohead&song=creep"
+
+# With pagination
+curl "http://localhost:3000/search?q=radiohead&page=2"
+
+# Authenticated DJ (all results)
+curl -H "Authorization: Bearer <jwt>" "http://localhost:3000/search?q=radiohead"
 ```
 
 **Example Response:**
@@ -78,7 +96,10 @@ curl "http://localhost:3000/search?artist=radiohead&song=creep"
       "archiveUrl": "https://archive.wxyc.org/?t=20240329080000"
     }
   ],
-  "total": 1
+  "total": 1,
+  "page": 1,
+  "pageSize": 25,
+  "totalHits": 150
 }
 ```
 
@@ -110,14 +131,17 @@ The `npm run start` script is configured for production deployments.
 wxyc-archive-search/
 ├── src/
 │   ├── index.ts              # Hono app and routes
+│   ├── middleware/
+│   │   └── auth.ts           # JWT/JWKS auth middleware
 │   ├── services/
-│   │   ├── playlist.ts       # Search and parse playlist results
-│   │   └── show.ts           # Fetch and parse show details
+│   │   ├── playlist.ts       # Search playlists via tubafrenzy JSON API
+│   │   └── show.ts           # Fetch show details via tubafrenzy JSON API
 │   ├── utils/
 │   │   └── date.ts           # Date parsing and archive URL generation
 │   └── types.ts              # TypeScript interfaces
 ├── test/
-│   ├── fixtures/             # Sample HTML files for testing
+│   ├── fixtures/             # JSON response fixtures
+│   ├── auth.test.ts
 │   ├── playlist.test.ts
 │   ├── show.test.ts
 │   └── date.test.ts
@@ -129,12 +153,12 @@ wxyc-archive-search/
 ## Data Flow
 
 1. User makes a search request with query parameters
-2. Service fetches results from the WXYC playlist proxy
-3. HTML table is parsed to extract search results
-4. Results are filtered to entries from the last 2 weeks
-5. For each result, the show detail page is fetched to get DJ name and show time
-6. Archive URLs are constructed using the show start time
-7. JSON response is returned with all metadata and archive URLs
+2. Service queries tubafrenzy's JSON API (`http://wxyc.info/playlists/searchPlaylists?format=json`)
+3. JSON response is mapped to internal types
+4. If unauthenticated, results are filtered to the last 2 weeks
+5. For each result, the show detail JSON API is called for DJ name and show time
+6. Archive URLs are constructed from the show's `startingRadioHour` epoch timestamp
+7. JSON response is returned with metadata, archive URLs, and pagination info
 
 ## License
 

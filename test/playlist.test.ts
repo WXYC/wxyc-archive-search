@@ -1,16 +1,19 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { parseSearchResults, filterResults } from '../src/services/playlist.js';
+import { mapSearchResults, searchPlaylists, filterResults } from '../src/services/playlist.js';
+import type { TubafrenzySearchResponse } from '../src/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, 'fixtures');
 
-describe('parseSearchResults', () => {
-  it('parses HTML table correctly', () => {
-    const html = readFileSync(join(fixturesDir, 'search-results.html'), 'utf-8');
-    const results = parseSearchResults(html);
+describe('mapSearchResults', () => {
+  it('maps JSON response to SearchResult array', () => {
+    const json: TubafrenzySearchResponse = JSON.parse(
+      readFileSync(join(fixturesDir, 'search-results.json'), 'utf-8'),
+    );
+    const results = mapSearchResults(json);
 
     expect(results).toHaveLength(3);
 
@@ -42,23 +45,125 @@ describe('parseSearchResults', () => {
     });
   });
 
-  it('handles empty HTML', () => {
-    const html = '<html><body></body></html>';
-    const results = parseSearchResults(html);
-    expect(results).toHaveLength(0);
+  it('maps release field to album', () => {
+    const json: TubafrenzySearchResponse = {
+      error: false,
+      totalHits: 1,
+      page: 1,
+      pageSize: 25,
+      searchString: 'test',
+      yearCounts: {},
+      results: [
+        {
+          flowsheetEntryID: '1',
+          artist: 'Test Artist',
+          song: 'Test Song',
+          release: 'Test Album',
+          label: 'Test Label',
+          radioShowID: '100',
+          date: '20240101',
+        },
+      ],
+    };
+    const results = mapSearchResults(json);
+    expect(results[0].album).toBe('Test Album');
   });
 
-  it('handles HTML with no matching rows', () => {
-    const html = `
-      <table>
-        <tr class="searchResultsHeader">
-          <th>Date of Show</th>
-          <th>Artist</th>
-        </tr>
-      </table>
-    `;
-    const results = parseSearchResults(html);
+  it('handles empty results', () => {
+    const json: TubafrenzySearchResponse = {
+      error: false,
+      totalHits: 0,
+      page: 1,
+      pageSize: 25,
+      searchString: 'nothing',
+      yearCounts: {},
+      results: [],
+    };
+    const results = mapSearchResults(json);
     expect(results).toHaveLength(0);
+  });
+});
+
+describe('searchPlaylists', () => {
+  const fixtureJson: TubafrenzySearchResponse = JSON.parse(
+    readFileSync(join(fixturesDir, 'search-results.json'), 'utf-8'),
+  );
+
+  beforeEach(() => {
+    vi.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('fetches with correct URL and returns mapped results', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(fixtureJson), { status: 200 }),
+    );
+
+    const result = await searchPlaylists({ q: 'radiohead' });
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://wxyc.info/playlists/searchPlaylists?mode=simple&format=json&searchString=radiohead&pageToDisplay=1',
+    );
+    expect(result.results).toHaveLength(3);
+    expect(result.totalHits).toBe(3);
+    expect(result.page).toBe(1);
+    expect(result.pageSize).toBe(25);
+  });
+
+  it('combines multiple search params into query string', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ...fixtureJson, results: [] }), { status: 200 }),
+    );
+
+    await searchPlaylists({ q: 'test', artist: 'Radiohead', song: 'Creep', album: 'Pablo' });
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('searchString=test%20Radiohead%20Creep%20Pablo'),
+    );
+  });
+
+  it('passes page parameter as pageToDisplay', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(fixtureJson), { status: 200 }),
+    );
+
+    await searchPlaylists({ q: 'test' }, 5);
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('pageToDisplay=5'),
+    );
+  });
+
+  it('throws when no search parameters provided', async () => {
+    await expect(searchPlaylists({})).rejects.toThrow('At least one search parameter is required');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('throws on non-OK HTTP response', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response('', { status: 500 }),
+    );
+
+    await expect(searchPlaylists({ q: 'test' })).rejects.toThrow('Failed to fetch search results: 500');
+  });
+
+  it('throws when API returns error flag', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: true, errorMessage: 'Bad query' }), { status: 200 }),
+    );
+
+    await expect(searchPlaylists({ q: 'test' })).rejects.toThrow('Bad query');
+  });
+
+  it('throws generic message when API error has no message', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: true }), { status: 200 }),
+    );
+
+    await expect(searchPlaylists({ q: 'test' })).rejects.toThrow('Tubafrenzy search returned an error');
   });
 });
 

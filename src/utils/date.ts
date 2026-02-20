@@ -1,44 +1,13 @@
 const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
 
 /**
- * Parse a show date in "M/DD/YY" or "MM/DD/YY" format
+ * Parse a tubafrenzy date string in YYYYMMDD format
  */
-export function parseShowDate(dateStr: string): Date {
-  const [month, day, year] = dateStr.split('/').map(Number);
-  const fullYear = year < 100 ? 2000 + year : year;
-  return new Date(fullYear, month - 1, day);
-}
-
-/**
- * Parse a show time string like "8:00 AM" and return hours and minutes
- */
-export function parseShowTime(timeStr: string): { hours: number; minutes: number } {
-  const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-  if (!match) {
-    throw new Error(`Invalid time format: ${timeStr}`);
-  }
-
-  let hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
-  const period = match[3].toUpperCase();
-
-  if (period === 'PM' && hours !== 12) {
-    hours += 12;
-  } else if (period === 'AM' && hours === 12) {
-    hours = 0;
-  }
-
-  return { hours, minutes };
-}
-
-/**
- * Combine a date and time string to create a full Date object
- */
-export function combineDateAndTime(dateStr: string, timeStr: string): Date {
-  const date = parseShowDate(dateStr);
-  const { hours, minutes } = parseShowTime(timeStr);
-  date.setHours(hours, minutes, 0, 0);
-  return date;
+export function parseTubafrenzyDate(dateStr: string): Date {
+  const year = parseInt(dateStr.slice(0, 4), 10);
+  const month = parseInt(dateStr.slice(4, 6), 10);
+  const day = parseInt(dateStr.slice(6, 8), 10);
+  return new Date(year, month - 1, day);
 }
 
 /**

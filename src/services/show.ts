@@ -1,65 +1,26 @@
-import * as cheerio from 'cheerio';
-import type { ShowDetails } from '../types.js';
-import { combineDateAndTime } from '../utils/date.js';
+import type { ShowDetails, TubafrenzyShowResponse } from '../types.js';
 
-const PROXY_BASE_URL = 'https://wxyc-proxy-production.up.railway.app/playlists';
+const TUBAFRENZY_BASE_URL = 'http://wxyc.info/playlists';
 
 /**
- * Parse the show details from the HTML page
+ * Map tubafrenzy JSON response to our ShowDetails type.
+ * startingRadioHour is epoch ms, so we convert directly to a Date.
  */
-export function parseShowDetails(html: string): ShowDetails {
-  const $ = cheerio.load(html);
-
-  // Find the header row with show info
-  // Format: "3/29/24<br>8:00 AM - 10:00 AM<br>..."
-  const headerCells = $('th.redlabel');
-  let showDate = '';
-  let showTime = '';
-  let dj = '';
-
-  headerCells.each((_, cell) => {
-    const html = $(cell).html() || '';
-    const text = $(cell).text().trim();
-
-    // Check for date/time cell (contains <br> and time format)
-    if (html.includes('<br>') && text.includes('AM') || text.includes('PM')) {
-      const parts = html.split('<br>');
-      if (parts.length >= 2) {
-        // First part is the date (e.g., "3/29/24")
-        showDate = parts[0].trim();
-        // Second part is the time range (e.g., "8:00 AM - 10:00 AM")
-        showTime = parts[1].replace(/<[^>]*>/g, '').trim();
-      }
-    }
-
-    // Check for DJ cell
-    if (text.includes('Disc Jockey:')) {
-      const djMatch = text.match(/Disc Jockey:\s*(.+)/);
-      if (djMatch) {
-        dj = djMatch[1].trim();
-      }
-    }
-  });
-
-  // Extract start time from the time range
-  const startTimeMatch = showTime.match(/^(\d{1,2}:\d{2}\s*[AP]M)/i);
-  const startTimeStr = startTimeMatch ? startTimeMatch[1] : showTime.split('-')[0].trim();
-
-  const startTime = combineDateAndTime(showDate, startTimeStr);
-
+export function mapShowDetails(response: TubafrenzyShowResponse): ShowDetails {
   return {
-    dj,
-    showDate,
-    showTime,
-    startTime,
+    dj: response.radioShow.discJockeyHandle,
+    showTime: response.radioShow.timeRange,
+    startTime: new Date(response.radioShow.startingRadioHour),
   };
 }
 
 /**
- * Fetch and parse show details for a given flowsheet entry ID
+ * Fetch and map show details for a given flowsheet entry ID
  */
 export async function getShowDetails(flowsheetEntryId: string): Promise<ShowDetails> {
-  const url = `${PROXY_BASE_URL}/radioShowHighlightSearchResult?flowsheetEntry=${flowsheetEntryId}`;
+  const url =
+    `${TUBAFRENZY_BASE_URL}/radioShowHighlightSearchResult` +
+    `?flowsheetEntry=${flowsheetEntryId}&format=json`;
 
   const response = await fetch(url);
 
@@ -67,6 +28,11 @@ export async function getShowDetails(flowsheetEntryId: string): Promise<ShowDeta
     throw new Error(`Failed to fetch show details: ${response.status}`);
   }
 
-  const html = await response.text();
-  return parseShowDetails(html);
+  const json: TubafrenzyShowResponse = await response.json();
+
+  if (json.error) {
+    throw new Error('Tubafrenzy show lookup returned an error');
+  }
+
+  return mapShowDetails(json);
 }

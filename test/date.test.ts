@@ -1,80 +1,31 @@
 import { describe, it, expect } from 'vitest';
 import {
-  parseShowDate,
-  parseShowTime,
-  combineDateAndTime,
+  parseTubafrenzyDate,
   buildArchiveUrl,
   isWithinTwoWeeks,
   formatISODate,
 } from '../src/utils/date.js';
 
-describe('parseShowDate', () => {
-  it('parses M/DD/YY format correctly', () => {
-    const date = parseShowDate('3/29/24');
+describe('parseTubafrenzyDate', () => {
+  it('parses YYYYMMDD format correctly', () => {
+    const date = parseTubafrenzyDate('20240329');
     expect(date.getFullYear()).toBe(2024);
     expect(date.getMonth()).toBe(2); // March is month 2 (0-indexed)
     expect(date.getDate()).toBe(29);
   });
 
-  it('parses MM/DD/YY format correctly', () => {
-    const date = parseShowDate('12/15/23');
-    expect(date.getFullYear()).toBe(2023);
-    expect(date.getMonth()).toBe(11); // December is month 11
-    expect(date.getDate()).toBe(15);
-  });
-
-  it('parses single-digit day correctly', () => {
-    const date = parseShowDate('1/5/24');
+  it('parses January date correctly', () => {
+    const date = parseTubafrenzyDate('20240105');
     expect(date.getFullYear()).toBe(2024);
     expect(date.getMonth()).toBe(0);
     expect(date.getDate()).toBe(5);
   });
-});
 
-describe('parseShowTime', () => {
-  it('parses AM time correctly', () => {
-    const { hours, minutes } = parseShowTime('8:00 AM');
-    expect(hours).toBe(8);
-    expect(minutes).toBe(0);
-  });
-
-  it('parses PM time correctly', () => {
-    const { hours, minutes } = parseShowTime('3:30 PM');
-    expect(hours).toBe(15);
-    expect(minutes).toBe(30);
-  });
-
-  it('parses 12:00 AM correctly (midnight)', () => {
-    const { hours, minutes } = parseShowTime('12:00 AM');
-    expect(hours).toBe(0);
-    expect(minutes).toBe(0);
-  });
-
-  it('parses 12:00 PM correctly (noon)', () => {
-    const { hours, minutes } = parseShowTime('12:00 PM');
-    expect(hours).toBe(12);
-    expect(minutes).toBe(0);
-  });
-
-  it('handles time without space before AM/PM', () => {
-    const { hours, minutes } = parseShowTime('9:15AM');
-    expect(hours).toBe(9);
-    expect(minutes).toBe(15);
-  });
-
-  it('throws on invalid time format', () => {
-    expect(() => parseShowTime('invalid')).toThrow('Invalid time format');
-  });
-});
-
-describe('combineDateAndTime', () => {
-  it('combines date and time correctly', () => {
-    const date = combineDateAndTime('3/29/24', '8:00 AM');
-    expect(date.getFullYear()).toBe(2024);
-    expect(date.getMonth()).toBe(2);
-    expect(date.getDate()).toBe(29);
-    expect(date.getHours()).toBe(8);
-    expect(date.getMinutes()).toBe(0);
+  it('parses December date correctly', () => {
+    const date = parseTubafrenzyDate('20231215');
+    expect(date.getFullYear()).toBe(2023);
+    expect(date.getMonth()).toBe(11);
+    expect(date.getDate()).toBe(15);
   });
 });
 
