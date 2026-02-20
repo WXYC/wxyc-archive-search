@@ -1,13 +1,13 @@
-import * as cheerio from 'cheerio';
-import type { SearchResult, SearchParams } from '../types.js';
+import type { SearchResult, SearchParams, TubafrenzySearchResponse } from '../types.js';
+import { parseTubafrenzyDate } from '../utils/date.js';
+import { formatISODate } from '../utils/date.js';
 
-const PROXY_BASE_URL = 'https://wxyc-proxy-production.up.railway.app/playlists';
+const TUBAFRENZY_BASE_URL = 'http://wxyc.info/playlists';
 
 /**
  * Build the search query string based on provided parameters
  */
 function buildSearchQuery(params: SearchParams): string {
-  // For the WXYC playlist search, we combine all search terms
   const terms: string[] = [];
 
   if (params.q) terms.push(params.q);
@@ -19,49 +19,38 @@ function buildSearchQuery(params: SearchParams): string {
 }
 
 /**
- * Parse the search results HTML table
+ * Map tubafrenzy JSON response to our SearchResult type
  */
-export function parseSearchResults(html: string): SearchResult[] {
-  const $ = cheerio.load(html);
-  const results: SearchResult[] = [];
-
-  $('tr.playlistEntrySearchResult').each((_, row) => {
-    const $row = $(row);
-    const flowsheetEntryId = $row.attr('id') || '';
-    const cells = $row.find('td');
-
-    if (cells.length >= 5) {
-      const showDate = $(cells[0]).text().trim();
-      const artist = $(cells[1]).text().trim();
-      const song = $(cells[2]).text().trim();
-      const album = $(cells[3]).text().trim();
-      const label = $(cells[4]).text().trim();
-
-      results.push({
-        artist,
-        song,
-        album,
-        label,
-        showDate,
-        flowsheetEntryId,
-      });
-    }
-  });
-
-  return results;
+export function mapSearchResults(response: TubafrenzySearchResponse): SearchResult[] {
+  return response.results.map((result) => ({
+    artist: result.artist,
+    song: result.song,
+    album: result.release,
+    label: result.label,
+    showDate: formatISODate(parseTubafrenzyDate(result.date)),
+    flowsheetEntryId: result.flowsheetEntryID,
+  }));
 }
 
 /**
- * Search playlists from the WXYC proxy
+ * Search playlists from tubafrenzy's JSON API.
+ * Returns both the mapped results and pagination metadata.
  */
-export async function searchPlaylists(params: SearchParams): Promise<SearchResult[]> {
+export async function searchPlaylists(
+  params: SearchParams,
+  page: number = 1,
+): Promise<{ results: SearchResult[]; totalHits: number; page: number; pageSize: number }> {
   const searchString = buildSearchQuery(params);
 
   if (!searchString) {
     throw new Error('At least one search parameter is required');
   }
 
-  const url = `${PROXY_BASE_URL}/searchPlaylists?mode=simple&searchString=${encodeURIComponent(searchString)}`;
+  const url =
+    `${TUBAFRENZY_BASE_URL}/searchPlaylists` +
+    `?mode=simple&format=json` +
+    `&searchString=${encodeURIComponent(searchString)}` +
+    `&pageToDisplay=${page}`;
 
   const response = await fetch(url);
 
@@ -69,8 +58,18 @@ export async function searchPlaylists(params: SearchParams): Promise<SearchResul
     throw new Error(`Failed to fetch search results: ${response.status}`);
   }
 
-  const html = await response.text();
-  return parseSearchResults(html);
+  const json: TubafrenzySearchResponse = await response.json();
+
+  if (json.error) {
+    throw new Error(json.errorMessage || 'Tubafrenzy search returned an error');
+  }
+
+  return {
+    results: mapSearchResults(json),
+    totalHits: json.totalHits,
+    page: json.page,
+    pageSize: json.pageSize,
+  };
 }
 
 /**

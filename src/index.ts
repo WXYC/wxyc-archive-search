@@ -3,19 +3,21 @@ import { serve } from '@hono/node-server';
 import { searchPlaylists, filterResults } from './services/playlist.js';
 import { getShowDetails } from './services/show.js';
 import { isWithinTwoWeeks, buildArchiveUrl, formatISODate } from './utils/date.js';
+import { authMiddleware } from './middleware/auth.js';
 import type { ArchiveEntry, SearchParams, SearchResponse } from './types.js';
 
-const app = new Hono();
+const app = new Hono<{ Variables: { authenticated: boolean } }>();
 
 app.get('/health', (c) => {
   return c.json({ status: 'ok' });
 });
 
-app.get('/search', async (c) => {
+app.get('/search', authMiddleware, async (c) => {
   const q = c.req.query('q');
   const artist = c.req.query('artist');
   const song = c.req.query('song');
   const album = c.req.query('album');
+  const page = parseInt(c.req.query('page') || '1', 10);
 
   const params: SearchParams = { q, artist, song, album };
 
@@ -23,27 +25,31 @@ app.get('/search', async (c) => {
     return c.json({ error: 'At least one search parameter (q, artist, song, album) is required' }, 400);
   }
 
+  const authenticated = c.get('authenticated');
+
   try {
-    // Search playlists
-    let results = await searchPlaylists(params);
+    const { results: searchResults, totalHits, page: currentPage, pageSize } =
+      await searchPlaylists(params, page);
 
     // Apply additional filtering if specific fields were requested
+    let results = searchResults;
     if (artist || song || album) {
       results = filterResults(results, params);
     }
 
-    // Filter to only entries from the last 2 weeks
-    const now = new Date();
-    const recentResults = results.filter((result) => {
-      // Search results have dates in YYYY-MM-DD format
-      const date = new Date(result.showDate);
-      return isWithinTwoWeeks(date, now);
-    });
+    // If not authenticated, filter to only entries from the last 2 weeks
+    if (!authenticated) {
+      const now = new Date();
+      results = results.filter((result) => {
+        const date = new Date(result.showDate);
+        return isWithinTwoWeeks(date, now);
+      });
+    }
 
     // Fetch show details for each result and build archive entries
     const archiveEntries: ArchiveEntry[] = [];
 
-    for (const result of recentResults) {
+    for (const result of results) {
       try {
         const showDetails = await getShowDetails(result.flowsheetEntryId);
 
@@ -65,6 +71,9 @@ app.get('/search', async (c) => {
     const response: SearchResponse = {
       results: archiveEntries,
       total: archiveEntries.length,
+      page: currentPage,
+      pageSize,
+      totalHits,
     };
 
     return c.json(response);

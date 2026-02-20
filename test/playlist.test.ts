@@ -2,15 +2,18 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { parseSearchResults, filterResults } from '../src/services/playlist.js';
+import { mapSearchResults, filterResults } from '../src/services/playlist.js';
+import type { TubafrenzySearchResponse } from '../src/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, 'fixtures');
 
-describe('parseSearchResults', () => {
-  it('parses HTML table correctly', () => {
-    const html = readFileSync(join(fixturesDir, 'search-results.html'), 'utf-8');
-    const results = parseSearchResults(html);
+describe('mapSearchResults', () => {
+  it('maps JSON response to SearchResult array', () => {
+    const json: TubafrenzySearchResponse = JSON.parse(
+      readFileSync(join(fixturesDir, 'search-results.json'), 'utf-8'),
+    );
+    const results = mapSearchResults(json);
 
     expect(results).toHaveLength(3);
 
@@ -42,22 +45,41 @@ describe('parseSearchResults', () => {
     });
   });
 
-  it('handles empty HTML', () => {
-    const html = '<html><body></body></html>';
-    const results = parseSearchResults(html);
-    expect(results).toHaveLength(0);
+  it('maps release field to album', () => {
+    const json: TubafrenzySearchResponse = {
+      error: false,
+      totalHits: 1,
+      page: 1,
+      pageSize: 25,
+      searchString: 'test',
+      yearCounts: {},
+      results: [
+        {
+          flowsheetEntryID: '1',
+          artist: 'Test Artist',
+          song: 'Test Song',
+          release: 'Test Album',
+          label: 'Test Label',
+          radioShowID: '100',
+          date: '20240101',
+        },
+      ],
+    };
+    const results = mapSearchResults(json);
+    expect(results[0].album).toBe('Test Album');
   });
 
-  it('handles HTML with no matching rows', () => {
-    const html = `
-      <table>
-        <tr class="searchResultsHeader">
-          <th>Date of Show</th>
-          <th>Artist</th>
-        </tr>
-      </table>
-    `;
-    const results = parseSearchResults(html);
+  it('handles empty results', () => {
+    const json: TubafrenzySearchResponse = {
+      error: false,
+      totalHits: 0,
+      page: 1,
+      pageSize: 25,
+      searchString: 'nothing',
+      yearCounts: {},
+      results: [],
+    };
+    const results = mapSearchResults(json);
     expect(results).toHaveLength(0);
   });
 });

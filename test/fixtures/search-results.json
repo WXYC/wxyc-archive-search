@@ -1,0 +1,41 @@
+{
+  "error": false,
+  "totalHits": 3,
+  "page": 1,
+  "pageSize": 25,
+  "searchString": "radiohead",
+  "yearCounts": {
+    "2024": 1,
+    "2012": 1,
+    "2011": 1
+  },
+  "results": [
+    {
+      "flowsheetEntryID": "2380735",
+      "artist": "Radiohead",
+      "song": "Creep",
+      "release": "Pablo Honey",
+      "label": "Capitol",
+      "radioShowID": "164683",
+      "date": "20240329"
+    },
+    {
+      "flowsheetEntryID": "1019985",
+      "artist": "Radiohead",
+      "song": "Knives",
+      "release": "Amnesiac",
+      "label": "Capitol",
+      "radioShowID": "100123",
+      "date": "20120422"
+    },
+    {
+      "flowsheetEntryID": "886910",
+      "artist": "Radiohead",
+      "song": "Airbag",
+      "release": "OK Computer",
+      "label": "Capitol",
+      "radioShowID": "90001",
+      "date": "20110503"
+    }
+  ]
+}
