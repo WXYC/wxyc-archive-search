@@ -4,6 +4,9 @@
   "description": "REST API that searches WXYC playlist archives and returns archive.wxyc.org URLs for playback",
   "type": "module",
   "main": "dist/index.js",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "npx tsx src/index.ts",
