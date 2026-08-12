@@ -21,7 +21,7 @@
     "playlist"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "dependencies": {
     "@hono/node-server": "^1.19.9",
     "@wxyc/shared": "github:WXYC/wxyc-shared",
